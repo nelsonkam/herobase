@@ -1,0 +1,16 @@
+{
+  "name": "herobase",
+  "version": 2,
+  "builds": [
+		{ "src": "**/*.js", "use": "@now/node" }
+  ],
+  "routes": [
+    {"src": "/connect", "dest": "/server/connect.js"},
+    {"src": "/callback", "dest": "/server/callback.js"}
+  ], 
+  "env": {
+    "HEROKU_CLIENT_ID": "@heroku-client-id",
+    "HEROKU_CLIENT_SECRET": "@heroku-client-secret",
+    "ROOT_URL": "https://herobase.nelsonkam.now.sh"
+  }  
+}
