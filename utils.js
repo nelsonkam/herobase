@@ -45,24 +45,36 @@ export async function getHerokuClient(zeitClient, metadata) {
 }
 
 export async function createOrGetHerokuApp(name, herokuClient) {
-  try {
-    const resp = await herokuClient.get(`apps/${name}`)
-    return resp.data
-  } catch (err) {
-    const resp = await herokuClient.post("apps", {name})
-    return resp.data
+  const resp = await herokuClient.get("apps")
+  const app = resp.data.filter(app => app.name.indexOf(name) > - 1)[0]
+  if (!app) {
+    const resp = await herokuClient.post("apps", {name: `${name}-${cuid.slug()}`})
+    return resp.data 
+  }
+  return app
+}
+
+export async function getAttachementConfigURL(attachement, herokuClient, type) {
+  const resp = await herokuClient.get("addons/" + attachement.addon.id + "/config");
+  if (type === "postgresql") {
+    return resp.data.filter(config => config.name === "url")[0];
+  } else if (type === "redis") {
+    return resp.data.filter(config => config.name === "URL")[0];
+  } else {
+    throw new Error('Unrecongnized type: ' + type)
   }
 }
 
-export async function getAttachementConfigURL(attachement, herokuClient) {
-  const resp = await herokuClient.get("addons/" + attachement.addon.id + "/config")
-  const urlConfig = resp.data.filter(config => config.name === "url")[0];
-  return urlConfig
-}
-
-export async function connectAttachement(projectId, attachement, url, zeitClient) {
+export async function connectAttachement(projectId, attachement, url, zeitClient, type) {
   const secretName = await zeitClient.ensureSecret(attachement.addon.name + "-url", url)
-  let envVariable = attachement.name === 'DATABASE' ? 'HEROKU_DATABASE' : attachement.name
+  let envVariable;
+  if (type === "postgresql") {
+    envVariable = attachement.name === 'DATABASE' ? 'HEROKU_DATABASE' : attachement.name
+  } else if (type === "redis") {
+    envVariable = attachement.name === 'REDIS' ? 'HEROKU_REDIS' : attachement.name
+  } else {
+    throw new Error('Unrecongnized type: ' + type)
+  }
   envVariable += `_URL_${cuid.slug().toUpperCase().substring(0, 4)}`
   await zeitClient.upsertEnv(projectId, envVariable, secretName)
   return {envVariable, secretName}
@@ -82,7 +94,6 @@ export async function saveConnection(connection, projectId, userMetadata, metada
 }
 
 export async function disconnectAttachement(connection, projectId, userMetadata, metadata, zeitClient) {
-  console.log(userMetadata)
   const connections = userMetadata.connections[projectId];
   await removeSecret(zeitClient, connection.secretName)
   await zeitClient.removeEnv(projectId, connection.envVariable)
@@ -95,4 +106,12 @@ export function getProjectConnections(projectId, userMetadata) {
   const connections = userMetadata.connections || {};
   const projectConnections = connections[projectId] || [];
   return projectConnections;
+}
+
+export function filterDatastores(attachement) {
+  return attachement.addon.name.indexOf("postgresql") > -1 || attachement.addon.name.indexOf("redis") > -1
+}
+
+export function getAttachementType(attachement) {
+  return attachement.addon.name.split("-")[0];
 }

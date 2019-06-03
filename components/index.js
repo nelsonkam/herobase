@@ -61,7 +61,7 @@ const ConnectionsSection = connections => htm`
 const DatastoreHeader = () => htm`
   <Box display="flex" justifyContent="space-between" alignItems="center">
     <Box margin="6px 0" fontSize="28px" fontWeight="600">Heroku Datastores</Box>
-    <Button action="create-datastore" small>Create datastore</Button>
+    <Button action="create-datastore" small highlight>Create datastore</Button>
   </Box>
 `
 

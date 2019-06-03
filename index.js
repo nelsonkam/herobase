@@ -8,7 +8,9 @@ const {
   getProjectConnections,
   disconnectAttachement,
   connectAttachement,
-  createOrGetHerokuApp
+  createOrGetHerokuApp,
+  filterDatastores,
+  getAttachementType
 } = require("./utils")
 
 const homeView = require("./views/home")
@@ -29,10 +31,11 @@ module.exports = withUiHook(async ({payload, zeitClient}) => {
     metadata[metadata.herokuData.user_id] = metadata[metadata.herokuData.user_id] || {};
     userMetadata = metadata[metadata.herokuData.user_id]
     const resp = await client.get("addon-attachments")
-    dbAttachements = resp.data.filter(attachement => attachement.addon.name.indexOf("postgresql") > -1)
+    dbAttachements = resp.data.filter(filterDatastores)
   }
 
   if (payload.project && payload.action === 'view') {
+    resp = await client.get("addon-attachments")
     return homeView(dbAttachements, getProjectConnections(payload.projectId, userMetadata));
   }
 
@@ -47,19 +50,20 @@ module.exports = withUiHook(async ({payload, zeitClient}) => {
   if (payload.action.indexOf("connect-db") === 0) {
     const attachementId = payload.action.split("connect-db-")[1];
     const attachement = dbAttachements.filter(attachement => attachement.id === attachementId)[0];
-    const urlConfig = await getAttachementConfigURL(attachement, client);
-    const {envVariable, secretName} = await connectAttachement(payload.projectId, attachement, urlConfig.value, zeitClient);
-    const connection = {id: `connection_${cuid()}`, secretName, envVariable, attachement};
+    const type = getAttachementType(attachement);
+    const urlConfig = await getAttachementConfigURL(attachement, client, type);
+    const {envVariable, secretName} = await connectAttachement(payload.projectId, attachement, urlConfig.value, zeitClient, type);
+    const connection = {id: `connection_${cuid()}`, secretName, envVariable, attachement, type};
     const connections = await saveConnection(connection, payload.projectId, userMetadata, metadata, zeitClient);
     return homeView(dbAttachements, connections, {type: "success", message: `Heroku datastore: ${attachement.addon.name} has been connected to ${payload.project.name}`})
   }
 
   if (payload.action === "create-datastore") {
-    const app = await createOrGetHerokuApp("herobase-zeit-now", client)
-    let resp = await client.post(`apps/${app.name}/addons`, {plan: "heroku-postgresql:hobby-dev"});
-    resp = await client.get("addon-attachments")
-    dbAttachements = resp.data.filter(attachement => attachement.addon.name.indexOf("postgresql") > -1)
-    return homeView(dbAttachements, getProjectConnections(payload.projectId, userMetadata), {type: "success", message: `A new datastore: ${resp.data.name} has been created on Heroku`});
+    const app = await createOrGetHerokuApp("herobase-zeit-now", client);
+    const addon = await client.post(`apps/${app.name}/addons`, {plan: "heroku-postgresql:hobby-dev"})
+    const resp = await client.get("addon-attachments")
+    dbAttachements = resp.data.filter(filterDatastores)
+    return homeView(dbAttachements, getProjectConnections(payload.projectId, userMetadata), {type: "success", message: `A new datastore: ${addon.data.name} has been created on Heroku`});
   }
   
 	return htm`
